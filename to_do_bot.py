@@ -1,0 +1,98 @@
+from flask import Flask, request, redirect, render_template
+from twilio.twiml.messaging_response import MessagingResponse
+import re   # using regex for remove function
+
+app = Flask(__name__)
+
+todolist = []   # store list items
+
+@app.route("/", methods=['GET', 'POST'])
+def hello_world():
+    return "Hello, world!"
+
+@app.route("/sms", methods=['GET', 'POST'])
+def incoming_sms():
+    """Receive incoming SMS and respond according to keywords"""
+    # Get the message body
+    body = request.values.get('Body', None)
+
+    # Start our TwiML response
+    resp = MessagingResponse()
+
+    # Determine the appropriate response/action for incoming message
+    replyText = getReply(body)
+
+    resp.message(replyText)
+
+    return str(resp)
+
+def getReply(message):
+    """Function to formulate response based on incoming SMS body."""
+    # Clean up incoming SMS
+    # message = message.lower().strip()
+    message = message.strip()
+
+    answer = ""     # store response text
+    item = ""       # store item name
+
+    if message.startswith("add"):
+        # remove keyword "add" from message
+        item = removeHead(message, "add")
+
+        # append item to todolist
+        todolist.append(item)
+
+        # Send confirmation reply
+        answer = "'{}' was added to To-Do list".format(item)
+        print("Item added to list", todolist)
+
+    elif message.startswith("list"):
+        lst = ""    # store enumerated list
+
+        # This will enumerate todolist every time user sends "list" sms
+        for count, elem in enumerate(todolist, 1):
+            lst += "{}. {}\n".format(count, elem)
+        
+        # Reply with enumerated list
+        answer = "This is what's on your To-Do list: \n{}".format(lst)
+        print("Show user their to-do list", lst)
+
+    elif message.startswith("remove"):
+        # TODO: Fix regex so it will remove double digit indices
+        # Extract what item number user wants to remove
+        removenum = int
+        for line in message:
+            x = re.findall('([0-9]+)', line)
+            if len(x) > 0:
+                removenum = int(x[0]) - 1   # -1 since index starts at 0
+                print ("x =", x)
+                print ("item number to remove:", removenum)
+
+        # remove item at index given by user
+        todolist.pop(removenum)
+        answer = "Removed item from To-Do list"
+        print("Removed item from to-do list", todolist)
+
+    else:
+        answer = "Welcome to To-Do List Bot! These are the commands you may use: \nadd \nlist \nremove"
+
+    if len(answer) > 1500:
+        answer = answer[0:1495] + "..."
+
+    return answer
+
+def removeHead(fromThis, removeThis):
+    if fromThis.endswith(removeThis):
+        fromThis = fromThis[:-len(removeThis)].strip()
+    elif fromThis.startswith(removeThis):
+        fromThis = fromThis[len(removeThis):].strip()
+    
+    return fromThis
+
+
+@app.route("/status", methods=['GET', 'POST'])
+def statuspage():
+    return render_template('status.html')
+
+if __name__ == "__main__":
+    app.run(debug=True)
